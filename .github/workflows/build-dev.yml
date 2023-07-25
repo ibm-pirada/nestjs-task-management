@@ -1,0 +1,86 @@
+name: DEV - Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: 'Environment'
+        required: true
+        default: 'develop'
+  push:
+    branches:
+      - develop
+    paths-ignore:
+      - '.github/**'
+  pull_request:
+    branches:
+      - develop
+
+env:
+  IMAGE_NAME: "nestjs-task-management"
+  IMAGE_TAG: "0.0.1-SNAPSHOT"
+  CONTAINER_REPOSITORY: "ghcr.io"
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Log in to registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        
+      - name: Setup node
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Unit test
+        run: npm test
+          
+      - name: Run test
+        run: |
+             go test -covermode=count -coverpkg=./... -coverprofile coverage.out -v ./...
+             go tool cover -html coverage.out -o coverage.html    
+
+      - name: Convert coverage to lcov
+        uses: jandelgado/gcov2lcov-action@v1
+
+      - name: Coverage Report - Comment Pull Request
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: romeovs/lcov-reporter-action@v0.3.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          lcov-file: ./coverage.lcov
+        continue-on-error: true
+
+      - name: Coverage Report - Upload Coverage Report
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: ./coverage.*
+
+      - name: Set image id
+        run: |
+          IMAGE_ID=${{ env.CONTAINER_REPOSITORY }}/${{ github.repository_owner }}/$IMAGE_NAME
+          # Change all uppercase to lowercase
+          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+          echo "IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg "TOKEN=${{ secrets.REPO_ACCESS_TOKEN }}" \
+            --tag="$IMAGE_ID:$IMAGE_TAG" ./
+
+      - name: Push image
+        if: github.event_name != 'pull_request'
+        run: |
+          docker push $IMAGE_ID:$IMAGE_TAG
