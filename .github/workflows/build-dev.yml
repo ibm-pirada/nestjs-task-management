@@ -48,20 +48,19 @@ jobs:
       - name: Convert coverage to lcov
         uses: jandelgado/gcov2lcov-action@v1
 
-      - name: Coverage Report - Comment Pull Request
+      - name: Comment Test Coverage
         if: ${{ github.event_name == 'pull_request' }}
-        uses: romeovs/lcov-reporter-action@v0.3.1
+        uses: artiomtr/jest-coverage-report-action@v2.0-rc.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          lcov-file: ./coverage.lcov
-        continue-on-error: true
-
-      - name: Coverage Report - Upload Coverage Report
+      
+      - name: "Coverage Report - Upload Coverage Report"
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v2
         with:
           name: coverage-report
-          path: ./coverage.*
+          path: ./coverage/**/*.*
+  
 
       - name: Set image id
         run: |
